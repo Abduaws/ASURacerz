@@ -1,6 +1,6 @@
 import random
 from flask import Flask
-from flask_socketio import SocketIO, emit, disconnect
+from flask_socketio import SocketIO, emit
 
 app = Flask(__name__)
 socketio = SocketIO(app)
@@ -85,6 +85,7 @@ def handle_playerCrash(data):
     global selectedCars, readyCount, playerPositions
     emit('endGame', data, broadcast=True)
     initGameVariables()
+    emit('setCars', selectedCars)
 
 
 def initGameVariables():
