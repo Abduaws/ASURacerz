@@ -382,36 +382,42 @@ def launchGame():
     
     initGamePlayers()
     StartBtn(startBtnClick)
-    
-    while run:
-        if startGameFlag and client.connected:
-            if moveFlag:
-                moveCar(pygame.key.get_pressed())
-            backPos.y += 10
-            backPos2.y += 10
-        drawWindow()
-        clock.tick(60)
+
+    try:
+        while run:
+            if startGameFlag and client.connected:
+                if moveFlag:
+                    moveCar(pygame.key.get_pressed())
+                backPos.y += 10
+                backPos2.y += 10
+            drawWindow()
+            clock.tick(60)
+    except Exception as e:
+        print(e)
 
 
 def updatePositioning():
     global player1Position, player2Position, run, currPlayerPos
-    while run:
-        time.sleep(0.1)
-        if not client.connected or not run:
-            continue
+    try:
+        while run:
+            time.sleep(0.1)
+            if not client.connected or not run:
+                continue
 
-        if currPlayerPos == 'player1Position':
-            data = {'SenderPos': 'player1Position',
-                    'ReceiverPos': 'player2Position',
-                    'player1Position': {'x': player1Position.x, 'y': player1Position.y},
-                    'player2Position': {'x': player2Position.x, 'y': player2Position.y}}
-        else:
-            data = {'SenderPos': 'player2Position',
-                    'ReceiverPos': 'player1Position',
-                    'player1Position': {'x': player1Position.x, 'y': player1Position.y},
-                    'player2Position': {'x': player2Position.x, 'y': player2Position.y}}
+            if currPlayerPos == 'player1Position':
+                data = {'SenderPos': 'player1Position',
+                        'ReceiverPos': 'player2Position',
+                        'player1Position': {'x': player1Position.x, 'y': player1Position.y},
+                        'player2Position': {'x': player2Position.x, 'y': player2Position.y}}
+            else:
+                data = {'SenderPos': 'player2Position',
+                        'ReceiverPos': 'player1Position',
+                        'player1Position': {'x': player1Position.x, 'y': player1Position.y},
+                        'player2Position': {'x': player2Position.x, 'y': player2Position.y}}
 
-        client.emit('update_position', data)
+            client.emit('update_position', data)
+    except Exception as e:
+        print(e)
 
 
 class UserNameInputDia(QtWidgets.QDialog):
@@ -471,8 +477,8 @@ class MainWindow(QtWidgets.QMainWindow):
             messageQueue.clear()
 
     def playAgainClick(self):
-        global WIN, threads, run, WIDTH, HEIGHT, myObjects, moveFlag, startGameFlag
-        global crashFlag, totalReadyCount, gameStatus, crashCount, disconnectedWhilePlaying
+        global WIN, threads, run, WIDTH, HEIGHT, myObjects, moveFlag, startGameFlag, player2Car, player1Car
+        global crashFlag, totalReadyCount, gameStatus, crashCount, disconnectedWhilePlaying, selectedCars
         self.setFixedSize(800, 600)
 
         WIN = pygame.display.set_mode((WIDTH, HEIGHT))
@@ -492,6 +498,9 @@ class MainWindow(QtWidgets.QMainWindow):
         crashCount = 0
 
         LoadedImages.init()
+
+        player1Car = selectedCars[0]
+        player2Car = selectedCars[1]
 
         game = threading.Thread(target=launchGame)
         threads.append(game)
@@ -638,7 +647,7 @@ if __name__ == "__main__":
 
     @client.on('endGame')
     def handle_endGame(data):
-        global clientName, gameStatus, player1Position, player2Position, run, startGameFlag
+        global clientName, gameStatus, player1Position, player2Position, run, startGameFlag, myObjects
         if data['loser'] == clientName:
             gameStatus = 'lost'
         else:
@@ -650,6 +659,7 @@ if __name__ == "__main__":
         time.sleep(3)
         run = False
         pygame.display.quit()
+        myObjects = []
         MainWindow.setFixedSize(800, 710)
 
     @client.on('connect')
