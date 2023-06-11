@@ -395,12 +395,23 @@ def launchGame():
 
 
 def updatePositioning():
-    global player1Position, player2Position, run
+    global player1Position, player2Position, run, currPlayerPos
     while run:
         time.sleep(0.1)
         if not client.connected:
             continue
-        data = {'playerPos': currPlayerPos, 'x': eval(f"{currPlayerPos}").x, 'y': eval(f"{currPlayerPos}").y}
+
+        if currPlayerPos == 'player1Position':
+            data = {'SenderPos': 'player1Position',
+                    'ReceiverPos': 'player2Position',
+                    'player1Position': {'x': player1Position.x, 'y': player1Position.y},
+                    'player2Position': {'x': player2Position.x, 'y': player2Position.y}}
+        else:
+            data = {'SenderPos': 'player2Position',
+                    'ReceiverPos': 'player1Position',
+                    'player1Position': {'x': player1Position.x, 'y': player1Position.y},
+                    'player2Position': {'x': player2Position.x, 'y': player2Position.y}}
+
         client.emit('update_position', data)
 
 
@@ -533,10 +544,15 @@ if __name__ == "__main__":
 
 
     @client.on('position_update')
-    def getNewPositions(newPos):
+    def getNewPositions(data):
+        global disconnectedWhilePlaying
         global player1Position, player2Position
-        eval(f"{newPos['playerPos']}").x = newPos['x']
-        eval(f"{newPos['playerPos']}").y = newPos['y']
+        eval(f'{data["SenderPos"]}').x = eval(f'{data[data["SenderPos"]]}')['x']
+        eval(f'{data["SenderPos"]}').y = eval(f'{data[data["SenderPos"]]}')['y']
+        if disconnectedWhilePlaying:
+            eval(f'{data["ReceiverPos"]}').x = eval(f'{data[data["ReceiverPos"]]}')['x']
+            eval(f'{data["ReceiverPos"]}').y = eval(f'{data[data["ReceiverPos"]]}')['y']
+            disconnectedWhilePlaying = False
 
     @client.on('spawnObstacle')
     def handle_spawnObstacle(pos):
@@ -556,40 +572,8 @@ if __name__ == "__main__":
         time.sleep(3)
         run = False
 
-    @client.on('retrievePositions')
-    def handle_retrievePositions():
-        print('[*] Received Request for Recovering Positions')
-        global player1Position, player2Position
-
-        if currPlayerPos == 'player1Position':
-            client.emit('retrievePositions',
-                        {'otherPlayerPosition': 'player2Position',
-                         'player1Position': {'x': player1Position.x, 'y': player1Position.y},
-                         'player2Position': {'x': player2Position.x, 'y': player2Position.y}})
-        else:
-            client.emit('retrievePositions',
-                        {'otherPlayerPosition': 'player1Position',
-                         'player1Position': {'x': player1Position.x, 'y': player1Position.y},
-                         'player2Position': {'x': player2Position.x, 'y': player2Position.y}})
-
-    @client.on('recoverPositions')
-    def handle_recoverPositions(data):
-        print('[*] Recovering Positions')
-        global currPlayerPos, player1Position, player2Position
-
-        currPlayerPos = data['otherPlayerPosition']
-        player1Position.x = data['player1Position']['x']
-        player1Position.y = data['player1Position']['y']
-
-        player2Position.x = data['player2Position']['x']
-        player2Position.y = data['player2Position']['y']
-
     @client.on('connect')
     def on_connect():
-        global disconnectedWhilePlaying
-        if disconnectedWhilePlaying:
-            client.emit('recoverPositions')
-            disconnectedWhilePlaying = False
         print('connected')
 
     @client.on('disconnect')
@@ -597,7 +581,6 @@ if __name__ == "__main__":
         global disconnectedWhilePlaying
         if startGameFlag:
             disconnectedWhilePlaying = True
-
 
 
     sys.exit(app.exec_())
