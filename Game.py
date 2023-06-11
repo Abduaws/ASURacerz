@@ -1,9 +1,11 @@
+import os
+import random
 import time
 import pygame
 import threading
 import re
 import socketio.exceptions
-from PyQt5 import QtWidgets, QtGui
+from PyQt5 import QtWidgets, QtGui, QtCore
 from PyQt5.QtCore import QTimer
 from PyQt5.uic import loadUi
 from socketio import Client
@@ -17,6 +19,7 @@ WIN = pygame.Surface((WIDTH, HEIGHT))
 
 client = Client()
 clientName = None
+IP = ''
 totalClientCount = 0
 messageQueue = []
 selectedCars = list()
@@ -38,6 +41,7 @@ moveFlag = True
 run = True
 disconnectedWhilePlaying = False
 playAgainFlag = False
+appRunning = True
 
 totalReadyCount = 0
 currPlayerPos = None
@@ -46,6 +50,20 @@ crashCount = 0
 crashTime = 0
 
 threads = []
+connectionHealthCheckerThread = threading.Thread()
+connectionInterruptedFlag = False
+LoadingWindow = None
+
+
+def resource_path(relative_path):
+    """ Get absolute path to resource, works for dev and for PyInstaller """
+    try:
+        # PyInstaller creates a temp folder and stores path in _MEIPASS
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+
+    return os.path.join(base_path, relative_path)
 
 
 class LoadedImages:
@@ -156,6 +174,43 @@ class LoadedImages:
                                                                 (70, 70 * LoadedImages.carAspectRatio))
 
 
+class LoadingDia(QtWidgets.QDialog):
+    def __init__(self):
+        super().__init__()
+        self.setWindowFlags(QtCore.Qt.WindowType.WindowStaysOnTopHint | QtCore.Qt.WindowType.CustomizeWindowHint)
+        self.setObjectName("Dialog")
+        self.setWindowTitle('Working')
+        self.setFixedSize(221, 221)
+        font = QtGui.QFont()
+        font.setPointSize(12)
+        self.setFont(font)
+
+        self.label = QtWidgets.QLabel(self)
+        self.label.setGeometry(QtCore.QRect(0, 0, 221, 221))
+        self.label.setScaledContents(True)
+        self.label.setText("")
+        self.label.setObjectName("label")
+
+        self.movie = QtGui.QMovie(f"Resources/Generic/Loading{random.randint(1, 3)}.gif")
+        self.label.setMovie(self.movie)
+        self.startAnimation()
+
+        self.timer = QTimer()
+        self.timer.timeout.connect(self.load_done)
+        self.timer.start(50)
+
+        QtCore.QMetaObject.connectSlotsByName(self)
+
+    def startAnimation(self):
+        self.movie.start()
+
+    def load_done(self):
+        global connectionInterruptedFlag
+        if not connectionInterruptedFlag:
+            self.movie.stop()
+            self.close()
+
+
 class StartBtn:
     def __init__(self, onclickFunction):
         self.onclickFunction = onclickFunction
@@ -248,6 +303,24 @@ def ConstructMessage(message, sender):
         'msg': message,
         'sender': sender
     }
+
+
+def checkConnectionHealth():
+    global appRunning, IP, connectionInterruptedFlag
+    while appRunning:
+        if not client.connected:
+            connectionInterruptedFlag = True
+            print(colorama.Fore.RED + "[*] Client: Couldn't Establish Connection To Server")
+            time.sleep(2)
+            if not client.connected:
+                print(colorama.Fore.BLUE + "[*] Client: Attempting to Establish Connection To Backup Server")
+                client.disconnect()
+                client.connect(f'http://{IP}:5000')
+                while not client.connected:
+                    pass
+                connectionInterruptedFlag = False
+                print(colorama.Fore.GREEN + "[*] Client: Connection Established To Backup Server")
+        time.sleep(0.1)
 
 
 def initGamePlayers():
@@ -405,7 +478,7 @@ def launchGame():
             drawWindow()
             clock.tick(60)
     except Exception as e:
-        pass
+        print(e)
 
 
 def updatePositioning():
@@ -429,7 +502,7 @@ def updatePositioning():
 
             client.emit('update_position', data)
     except Exception as e:
-        pass
+        print(e)
 
 
 class UserNameInputDia(QtWidgets.QDialog):
@@ -481,7 +554,11 @@ class MainWindow(QtWidgets.QMainWindow):
         print(colorama.Fore.YELLOW + "[*] Client: Sending Chat Message To Server")
 
     def processMessage(self):
-        global totalClientCount, playAgainFlag
+        global totalClientCount, playAgainFlag, connectionInterruptedFlag, LoadingWindow
+        if connectionInterruptedFlag:
+            LoadingWindow = LoadingDia()
+            self.alreadyRan = True
+            LoadingWindow.exec_()
         if playAgainFlag:
             MainWindow.setFixedSize(800, 710)
             time.sleep(1)
@@ -521,7 +598,8 @@ class MainWindow(QtWidgets.QMainWindow):
         game.start()
 
     def joinClick(self):
-        if not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+', self.ipInput.text()):
+        global connectionHealthCheckerThread
+        if not re.fullmatch(r'([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)|(localhost)', self.ipInput.text()):
             self.errorPopup('Enter IP in Correct Format')
             return
 
@@ -533,24 +611,30 @@ class MainWindow(QtWidgets.QMainWindow):
                 self.connectionError = False
                 return
 
+        connectionHealthCheckerThread = threading.Thread(target=checkConnectionHealth)
+        connectionHealthCheckerThread.start()
+
         self.InitPygame()
 
         self.stackedWidget.setCurrentIndex(1)
 
     def connectToServer(self):
-        global clientName, threads
+        global clientName, threads, IP
+
+        IP = self.ipInput.text()
 
         inputDia = UserNameInputDia()
         clientName = inputDia.getUserName()
         if not clientName:
             return
 
-        connectionThread = threading.Thread(target=lambda: self.ServerConnectionHandler(self.ipInput.text()))
+        connectionThread = threading.Thread(target=lambda: self.ServerConnectionHandler(IP))
         threads.append(connectionThread)
         connectionThread.start()
 
     def closeEvent(self, event):
-        global client, startGameFlag, run
+        global client, startGameFlag, run, connectionHealthCheckerThread, appRunning
+        appRunning = False
         startGameFlag = False
         run = False
         self.exitClicked = True
@@ -559,6 +643,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.timer.stop()
         for thread in threads:
             thread.join()
+        connectionHealthCheckerThread.join()
+        pygame.quit()
 
     def ServerConnectionHandler(self, IP):
         try:
