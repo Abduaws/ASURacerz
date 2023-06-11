@@ -8,7 +8,10 @@ from socketio import Client
 
 
 client = Client()
+clientName = None
 messageQueue = []
+totalClientCount = 0
+totalReadyCount = 0
 
 
 class LoadedImages:
@@ -139,18 +142,22 @@ class StartBtn:
         myObjects.append(self)
 
     def process(self):
+        global totalClientCount, totalReadyCount
         mousePos = pygame.mouse.get_pos()
         self.startBtn = LoadedImages.startGameImage
         if self.startRect.collidepoint(mousePos):
             self.startBtn = LoadedImages.startGameDarkImage
             if pygame.mouse.get_pressed(num_buttons=3)[0]:
                 if not self.alreadyPressed:
-                    self.onclickFunction()
+                    client.emit('ready')
+                    if totalClientCount == totalReadyCount:
+                        self.onclickFunction()
                     self.alreadyPressed = True
             else:
                 self.alreadyPressed = False
 
-        text = pygame.font.Font("../Resources/TechnoRaceFont.otf", 48).render("1/2", True, "#ffffff")
+        text = pygame.font.Font("../Resources/TechnoRaceFont.otf", 48).render(f"{totalReadyCount}/{totalClientCount}",
+                                                                              True, "#ffffff")
         textRect = text.get_rect()
         textRect.center = (WIDTH // 2, HEIGHT // 2 + 150)
 
@@ -329,10 +336,10 @@ def checkCollision(p1Rect, p2Rect, p3Rect=None, p4Rect=None):
 
 
 def drawWindow():
-    global playerCount, backPos
+    global playerCount, backPos, totalClientCount
     p1Rect, p2Rect, p3Rect, p4Rect = [None]*4
     WIN.fill("#7e6d61")
-    text = pygame.font.Font("../Resources/TechnoRaceFont.otf", 18).render(f"Number Of Players: {playerCount}", True,
+    text = pygame.font.Font("../Resources/TechnoRaceFont.otf", 18).render(f"Number Of Players: {totalClientCount}", True,
                                                                        "#ffffff", "#7e6d61")
     textRect = text.get_rect()
     textRect.center = (100, 30)
@@ -468,22 +475,30 @@ class MainWindow(QtWidgets.QMainWindow):
         super(MainWindow, self).__init__()
         loadUi("Resources/UI/MainMenu.ui", self)
         self.joinBtn.clicked.connect(self.joinClick)
+        self.ipInput.returnPressed.connect(self.joinClick)
         self.sendBtn.clicked.connect(self.sendClick)
+        self.msgInput.returnPressed.connect(self.sendClick)
         self.connectionThread = QThread()
         self.timer = QTimer()
         self.timer.timeout.connect(self.processMessage)
         self.timer.start(50)
 
     def sendClick(self):
-        client.emit('message', ConstructMessage(self.msgInput.text(), 'Player'))
+        global clientName
+        client.emit('message', ConstructMessage(self.msgInput.text(), clientName))
 
     def processMessage(self):
+        global totalClientCount
         if messageQueue:
             for data in messageQueue:
-                self.serverText.setText(self.serverText.toPlainText() + f"\n{data['sender']}: {data['msg']}")
+                if 'clientCount' in data.keys():
+                    totalClientCount = data['clientCount']
+                self.serverText.append(f"\n{data['sender']}: {data['msg']}")
             messageQueue.clear()
 
     def joinClick(self):
+        global clientName
+        clientName = QtWidgets.QInputDialog.getText(MainWindow, "UserName", f"Enter your username:")[0]
         self.connectionThread.started.connect(lambda: client.connect(f"http://{self.ipInput.text()}:5050"))
         self.connectionThread.start()
         self.reInitPygame()
@@ -540,6 +555,17 @@ if __name__ == "__main__":
     @client.on('message')
     def receiveMessage(data):
         messageQueue.append(data)
+
+
+    @client.on('ready')
+    def handle_ready(data):
+        global totalReadyCount
+        totalReadyCount = int(data)
+
+
+    @client.on('start')
+    def handle_start():
+        startBtnClick()
 
 
     @client.on('position_update')
