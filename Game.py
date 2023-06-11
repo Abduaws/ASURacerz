@@ -7,6 +7,7 @@ from PyQt5 import QtWidgets, QtGui
 from PyQt5.QtCore import QTimer
 from PyQt5.uic import loadUi
 from socketio import Client
+import colorama
 
 
 pygame.init()
@@ -172,6 +173,7 @@ class StartBtn:
             if pygame.mouse.get_pressed(num_buttons=3)[0]:
                 if not self.alreadyPressed:
                     client.emit('ready')
+                    print(colorama.Fore.BLUE + "[*] Client: Sending Ready Signal To Server")
                     if totalClientCount == totalReadyCount:
                         self.onclickFunction()
                     self.alreadyPressed = True
@@ -220,14 +222,24 @@ class Obstacle:
             myObjects.remove(self)
 
         if currPlayerPos == 'player1Position':
-            pRect = eval(f"LoadedImages.{player1Car}").get_bounding_rect()
-        else:
-            pRect = eval(f"LoadedImages.{player2Car}").get_bounding_rect()
+            currPlayerRect = eval(f"LoadedImages.{player1Car}").get_bounding_rect()
+            currPlayerRect.x, currPlayerRect.y = eval("player1Position").x, eval("player1Position").y
 
-        pRect.x, pRect.y = eval(f"{currPlayerPos}").x, eval(f"{currPlayerPos}").y
-        if pRect.colliderect(self.obstacleRect):
+            otherPlayerRect = eval(f"LoadedImages.{player2Car}").get_bounding_rect()
+            otherPlayerRect.x, otherPlayerRect.y = eval("player2Position").x, eval("player2Position").y
+        else:
+            currPlayerRect = eval(f"LoadedImages.{player2Car}").get_bounding_rect()
+            currPlayerRect.x, currPlayerRect.y = eval("player2Position").x, eval("player2Position").y
+
+            otherPlayerRect = eval(f"LoadedImages.{player1Car}").get_bounding_rect()
+            otherPlayerRect.x, otherPlayerRect.y = eval("player1Position").x, eval("player1Position").y
+
+        if otherPlayerRect.colliderect(self.obstacleRect):
+            myObjects.remove(self)
+
+        if currPlayerRect.colliderect(self.obstacleRect):
+            myObjects.remove(self)
             crashPlayer()
-            print(f"Player {clientName} Crashed into Obstacle")
 
 
 def ConstructMessage(message, sender):
@@ -254,11 +266,9 @@ def initGamePlayers():
 def displayCrashMsg():
     global crashTime, crashFlag, moveFlag
     if crashFlag:
-        moveFlag = False
         LoadedImages.reInitCars()
         if pygame.time.get_ticks() - crashTime >= 500:
             crashFlag = False
-            moveFlag = True
             return
         crashRect = LoadedImages.crashImage.get_rect()
         crashRect.center = (WIN.get_width() / 2, WIN.get_height() / 2)
@@ -271,6 +281,7 @@ def crashPlayer():
         return
     if crashCount > 3:
         client.emit('playerCrash', {'loser': clientName})
+        print(colorama.Fore.RED + "[*] Client: Sending Crash Signal To Server")
         return
 
     if currPlayerPos == "player1Position":
@@ -393,7 +404,7 @@ def launchGame():
             drawWindow()
             clock.tick(60)
     except Exception as e:
-        print(e)
+        pass
 
 
 def updatePositioning():
@@ -417,7 +428,7 @@ def updatePositioning():
 
             client.emit('update_position', data)
     except Exception as e:
-        print(e)
+        pass
 
 
 class UserNameInputDia(QtWidgets.QDialog):
@@ -466,6 +477,7 @@ class MainWindow(QtWidgets.QMainWindow):
     def sendClick(self):
         global clientName
         client.emit('message', ConstructMessage(self.msgInput.text(), clientName))
+        print(colorama.Fore.YELLOW + "[*] Client: Sending Chat Message To Server")
 
     def processMessage(self):
         global totalClientCount
@@ -609,25 +621,30 @@ if __name__ == "__main__":
 
     @client.on('message')
     def receiveMessage(data):
+        print(colorama.Fore.YELLOW + "[*] Client: Received Chat Message From Server")
         messageQueue.append(data)
 
     @client.on('ready')
     def handle_ready(data):
         global totalReadyCount
         totalReadyCount = int(data)
+        print(colorama.Fore.BLUE + "[*] Client: Received Player Ready Signal From Server")
 
     @client.on('start')
     def handle_start():
         startBtnClick()
+        print(colorama.Fore.GREEN + "[*] Client: Received Start Game Signal From Server")
 
     @client.on('playerSet')
     def handle_playerSet(player):
         global currPlayerPos
         currPlayerPos = player
+        print(colorama.Fore.BLUE + "[*] Client: Received Client Player Position From Server")
 
     @client.on('setCars')
     def handle_setCars(selected_Cars):
         global selectedCars
+        print(colorama.Fore.BLUE + "[*] Client: Received Car List From Server")
         selectedCars = selected_Cars
 
     @client.on('position_update')
@@ -643,34 +660,37 @@ if __name__ == "__main__":
 
     @client.on('spawnObstacle')
     def handle_spawnObstacle(pos):
-        Obstacle(pos)
+        if run and startGameFlag:
+            Obstacle(pos)
 
     @client.on('endGame')
     def handle_endGame(data):
         global clientName, gameStatus, player1Position, player2Position, run, startGameFlag, myObjects
+        myObjects.clear()
+        print(colorama.Fore.RED + "[*] Client: Received End Game Signal From Server")
         if data['loser'] == clientName:
             gameStatus = 'lost'
         else:
             gameStatus = 'won'
         player1Position = pygame.Vector2(100000, 100000)
-        player2Position = pygame.Vector2(100000, 100000)
+        player2Position = pygame.Vector2(10000, 10000)
         startGameFlag = False
         WinLose()
         time.sleep(3)
         run = False
         pygame.display.quit()
-        myObjects = []
         MainWindow.setFixedSize(800, 710)
 
     @client.on('connect')
     def on_connect():
-        print('connected')
+        print(colorama.Fore.GREEN + "[*] Client: Connected To Server")
 
     @client.on('disconnect')
     def on_disconnect():
         global disconnectedWhilePlaying
         if startGameFlag:
             disconnectedWhilePlaying = True
+        print(colorama.Fore.RED + "[*] Client: Disconnected From Server")
 
 
     sys.exit(app.exec_())
