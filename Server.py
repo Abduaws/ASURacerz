@@ -1,19 +1,13 @@
 import random
 from flask import Flask
-from flask_socketio import SocketIO, emit
+from flask_socketio import SocketIO, emit, disconnect
 
 app = Flask(__name__)
 socketio = SocketIO(app)
 
 
-carModels = ["audiCarImage", "blackVCarImage", "CarImage", "miniTruckCarImage", "miniVanCarImage",
-             "policeCarImage", "taxiCarImage", "truckCarImage", "ambulanceCarImage"]
-car1 = random.choice(carModels)
-carModels.remove(car1)
-car2 = random.choice(carModels)
-selectedCars = [car1, car2]
-playerPositions = ['player1_pos', 'player2_pos']
-player_positions = {}
+selectedCars = list()
+playerPositions = list()
 clientCount = 0
 readyCount = 0
 
@@ -72,35 +66,53 @@ def handle_message(data: dict):
 @socketio.on('ready')
 def handle_ready():
     global readyCount, clientCount, playerPositions
-    print(playerPositions)
     readyCount += 1
     emit('playerSet', playerPositions[0])
     playerPositions.pop(0)
     emit('ready', readyCount, broadcast=True)
-    if readyCount == clientCount:
+    if readyCount == 2:
         emit('start', broadcast=True)
 
 
 @socketio.on('update_position')
 def handle_update_position(data):
     emit('position_update', data, broadcast=True, include_self=False)
-    spawnObstacles()
+    # spawnObstacles()
+
+
+@socketio.on('retrievePositions')
+def handle_retrievePositions(data):
+    print('[*] Received Positions from Player')
+    print('[*] Forwarding Positions to other Player\n')
+    emit('recoverPositions', data, broadcast=True, include_self=False)
+
+
+@socketio.on('recoverPositions')
+def handle_recoverPositions():
+    print('[*] A Client Reconnected While Game is Being Played')
+    print('[*] Retrieving Positions from other Player\n')
+    emit('retrievePositions', broadcast=True, include_self=False)
 
 
 @socketio.on('playerCrash')
 def handle_playerCrash(data):
-    global car1, car2, carModels, selectedCars, readyCount, playerPositions, player_positions
+    global selectedCars, readyCount, playerPositions
     emit('endGame', data, broadcast=True)
+    initGameVariables()
+
+
+def initGameVariables():
+    global selectedCars, playerPositions, readyCount
     carModels = ["audiCarImage", "blackVCarImage", "CarImage", "miniTruckCarImage", "miniVanCarImage",
                  "policeCarImage", "taxiCarImage", "truckCarImage", "ambulanceCarImage"]
     car1 = random.choice(carModels)
     carModels.remove(car1)
     car2 = random.choice(carModels)
     selectedCars = [car1, car2]
-    playerPositions = ['player1_pos', 'player2_pos']
-    player_positions = {}
+    playerPositions = ['player1Position', 'player2Position']
     readyCount = 0
 
 
 if __name__ == '__main__':
+    initGameVariables()
     socketio.run(app, "192.168.1.203", 5050)
