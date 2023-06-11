@@ -4,6 +4,8 @@ import time
 import pygame
 import threading
 import re
+
+import requests
 import socketio.exceptions
 from PyQt5 import QtWidgets, QtGui, QtCore
 from PyQt5.QtCore import QTimer
@@ -590,6 +592,14 @@ def CheckAlive(host, port):
         return False
 
 
+def CheckInternetConnection():
+    try:
+        response = requests.get('http://www.google.com', timeout=3)
+        return response.status_code == 200
+    except requests.ConnectionError:
+        return False
+
+
 def ServerConnect(server, port):
     global client, IP, clientConnected
     print(colorama.Fore.BLUE + f"[*] Client: Attempting to Establish Connection To {server}")
@@ -605,6 +615,8 @@ def ServerConnect(server, port):
 def checkConnectionHealth():
     global appRunning, IP, connectionInterruptedFlag, client
     while appRunning:
+        if not CheckInternetConnection():
+            continue
         if not clientConnected:
             connectionInterruptedFlag = True
 
