@@ -1,87 +1,88 @@
 import random
 import pygame
-import easygui
 import threading
 
-pygame.init()
-WIDTH, HEIGHT = 1080, 720
-WIN = pygame.display.set_mode((WIDTH, HEIGHT))
-pygame.display.set_caption("ASU RacerZ")
-pygame.display.set_icon(pygame.image.load("../Resources/icon.png"))
-clock = pygame.time.Clock()
-
-playerCount = 2
-playerChangeFlag = False
-startGameFlag = False
-player1_pos = pygame.Vector2(0, 0)
-player2_pos = pygame.Vector2(0, 0)
-player3_pos = pygame.Vector2(0, 0)
-player4_pos = pygame.Vector2(0, 0)
-limitLeft = 0
-limitRight = (1080 - 70)
-backPos = pygame.Vector2(0, 0)
-backPos2 = pygame.Vector2(0, 0)
-
-myObjects = []
-crashTime = 0
-crashFlag = False
-moveFlag = True
-
-carModels = ["audiCarImage", "blackVCarImage", "CarImage", "miniTruckCarImage", "miniVanCarImage", "policeCarImage",
-             "taxiCarImage", "truckCarImage", "ambulanceCarImage"]
-playerCar = random.choice(carModels)
+from PyQt5 import QtWidgets, QtGui
+from PyQt5.uic import loadUi
 
 
 class LoadedImages:
-    audiCarImage = pygame.image.load("../Resources/Cars/Audi.png").convert_alpha()
-    carAspectRatio = audiCarImage.get_height() / audiCarImage.get_width()
-    audiCarImage = pygame.transform.scale(audiCarImage, (70, 70 * carAspectRatio))
-    blackVCarImage = pygame.image.load("../Resources/Cars/Black_viper.png").convert_alpha()
-    blackVCarImage = pygame.transform.scale(blackVCarImage, (70, 70 * carAspectRatio))
-    CarImage = pygame.image.load("../Resources/Cars/Car.png").convert_alpha()
-    CarImage = pygame.transform.scale(CarImage, (70, 70 * carAspectRatio))
-    miniTruckCarImage = pygame.image.load("../Resources/Cars/Mini_truck.png").convert_alpha()
-    miniTruckCarImage = pygame.transform.scale(miniTruckCarImage, (70, 70 * carAspectRatio))
-    miniVanCarImage = pygame.image.load("../Resources/Cars/Mini_van.png").convert_alpha()
-    miniVanCarImage = pygame.transform.scale(miniVanCarImage, (70, 70 * carAspectRatio))
-    policeCarImage = pygame.image.load("../Resources/Cars/Police.png").convert_alpha()
-    policeCarImage = pygame.transform.scale(policeCarImage, (70, 70 * carAspectRatio))
-    taxiCarImage = pygame.image.load("../Resources/Cars/taxi.png").convert_alpha()
-    taxiCarImage = pygame.transform.scale(taxiCarImage, (70, 70 * carAspectRatio))
-    truckCarImage = pygame.image.load("../Resources/Cars/truck.png").convert_alpha()
-    truckCarImage = pygame.transform.scale(truckCarImage, (70, 70 * carAspectRatio))
-    ambulanceCarImage = pygame.image.load("../Resources/Cars/Ambulance.png").convert_alpha()
-    ambulanceCarImage = pygame.transform.scale(ambulanceCarImage, (70, 70 * carAspectRatio))
+    audiCarImage = None
+    carAspectRatio = None
+    blackVCarImage = None
+    CarImage = None
+    miniTruckCarImage = None
+    miniVanCarImage = None
+    policeCarImage = None
+    taxiCarImage = None
+    truckCarImage = None
+    ambulanceCarImage = None
+    road2pImage = None
+    road2pAspectRatio = None
+    road3pImage = None
+    road3pAspectRatio = None
+    road4pImage = None
+    road4pAspectRatio = None
+    startGameImage = None
+    startGameImageAspectRatio = None
+    startGameDarkImage = None
+    startGameDarkImageAspectRatio = None
+    crashImage = None
+    crashImageAspectRatio = None
+    boulderImage = None
+    spikeImage = None
 
-    road2pImage = pygame.image.load("../Resources/Roads/road2p.png").convert_alpha()
-    road2pAspectRatio = road2pImage.get_height() / road2pImage.get_width()
-    road2pImage = pygame.transform.scale(road2pImage, (720 * road2pAspectRatio, 720))
+    @staticmethod
+    def init():
+        LoadedImages.audiCarImage = pygame.image.load("../Resources/Cars/Audi.png").convert_alpha()
+        LoadedImages.carAspectRatio = LoadedImages.audiCarImage.get_height() / LoadedImages.audiCarImage.get_width()
+        LoadedImages.audiCarImage = pygame.transform.scale(LoadedImages.audiCarImage, (70, 70 * LoadedImages.carAspectRatio))
+        LoadedImages.blackVCarImage = pygame.image.load("../Resources/Cars/Black_viper.png").convert_alpha()
+        LoadedImages.blackVCarImage = pygame.transform.scale(LoadedImages.blackVCarImage, (70, 70 * LoadedImages.carAspectRatio))
+        LoadedImages.CarImage = pygame.image.load("../Resources/Cars/Car.png").convert_alpha()
+        LoadedImages.CarImage = pygame.transform.scale(LoadedImages.CarImage, (70, 70 * LoadedImages.carAspectRatio))
+        LoadedImages.miniTruckCarImage = pygame.image.load("../Resources/Cars/Mini_truck.png").convert_alpha()
+        LoadedImages.miniTruckCarImage = pygame.transform.scale(LoadedImages.miniTruckCarImage, (70, 70 * LoadedImages.carAspectRatio))
+        LoadedImages.miniVanCarImage = pygame.image.load("../Resources/Cars/Mini_van.png").convert_alpha()
+        LoadedImages.miniVanCarImage = pygame.transform.scale(LoadedImages.miniVanCarImage, (70, 70 * LoadedImages.carAspectRatio))
+        LoadedImages.policeCarImage = pygame.image.load("../Resources/Cars/Police.png").convert_alpha()
+        LoadedImages.policeCarImage = pygame.transform.scale(LoadedImages.policeCarImage, (70, 70 * LoadedImages.carAspectRatio))
+        LoadedImages.taxiCarImage = pygame.image.load("../Resources/Cars/taxi.png").convert_alpha()
+        LoadedImages.taxiCarImage = pygame.transform.scale(LoadedImages.taxiCarImage, (70, 70 * LoadedImages.carAspectRatio))
+        LoadedImages.truckCarImage = pygame.image.load("../Resources/Cars/truck.png").convert_alpha()
+        LoadedImages.truckCarImage = pygame.transform.scale(LoadedImages.truckCarImage, (70, 70 * LoadedImages.carAspectRatio))
+        LoadedImages.ambulanceCarImage = pygame.image.load("../Resources/Cars/Ambulance.png").convert_alpha()
+        LoadedImages.ambulanceCarImage = pygame.transform.scale(LoadedImages.ambulanceCarImage, (70, 70 * LoadedImages.carAspectRatio))
 
-    road3pImage = pygame.image.load("../Resources/Roads/road3p.png").convert_alpha()
-    road3pAspectRatio = road3pImage.get_height() / road3pImage.get_width()
-    road3pImage = pygame.transform.scale(road3pImage, (720 * road2pAspectRatio, 720))
+        LoadedImages.road2pImage = pygame.image.load("../Resources/Roads/road2p.png").convert_alpha()
+        LoadedImages.road2pAspectRatio = LoadedImages.road2pImage.get_height() / LoadedImages.road2pImage.get_width()
+        LoadedImages.road2pImage = pygame.transform.scale(LoadedImages.road2pImage, (720 * LoadedImages.road2pAspectRatio, 720))
 
-    road4pImage = pygame.image.load("../Resources/Roads/road4p.png").convert_alpha()
-    road4pAspectRatio = road4pImage.get_height() / road4pImage.get_width()
-    road4pImage = pygame.transform.scale(road4pImage, (720 * road2pAspectRatio, 720))
+        LoadedImages.road3pImage = pygame.image.load("../Resources/Roads/road3p.png").convert_alpha()
+        LoadedImages.road3pAspectRatio = LoadedImages.road3pImage.get_height() / LoadedImages.road3pImage.get_width()
+        LoadedImages.road3pImage = pygame.transform.scale(LoadedImages.road3pImage, (720 * LoadedImages.road2pAspectRatio, 720))
 
-    startGameImage = pygame.image.load("../Resources/StartGame.png").convert_alpha()
-    startGameImageAspectRatio = startGameImage.get_height() / startGameImage.get_width()
-    startGameImage = pygame.transform.scale(startGameImage, (360, 360 * startGameImageAspectRatio))
+        LoadedImages.road4pImage = pygame.image.load("../Resources/Roads/road4p.png").convert_alpha()
+        LoadedImages.road4pAspectRatio = LoadedImages.road4pImage.get_height() / LoadedImages.road4pImage.get_width()
+        LoadedImages.road4pImage = pygame.transform.scale(LoadedImages.road4pImage, (720 * LoadedImages.road2pAspectRatio, 720))
 
-    startGameDarkImage = pygame.image.load("../Resources/StartGameDark.png").convert_alpha()
-    startGameDarkImageAspectRatio = startGameDarkImage.get_height() / startGameDarkImage.get_width()
-    startGameDarkImage = pygame.transform.scale(startGameDarkImage, (360, 360 * startGameDarkImageAspectRatio))
+        LoadedImages.startGameImage = pygame.image.load("../Resources/StartGame.png").convert_alpha()
+        LoadedImages.startGameImageAspectRatio = LoadedImages.startGameImage.get_height() / LoadedImages.startGameImage.get_width()
+        LoadedImages.startGameImage = pygame.transform.scale(LoadedImages.startGameImage, (360, 360 * LoadedImages.startGameImageAspectRatio))
 
-    crashImage = pygame.image.load("../Resources/crash.png").convert_alpha()
-    crashImageAspectRatio = crashImage.get_height() / crashImage.get_width()
-    crashImage = pygame.transform.scale(crashImage, (360, 360 * crashImageAspectRatio))
+        LoadedImages.startGameDarkImage = pygame.image.load("../Resources/StartGameDark.png").convert_alpha()
+        LoadedImages.startGameDarkImageAspectRatio = LoadedImages.startGameDarkImage.get_height() / LoadedImages.startGameDarkImage.get_width()
+        LoadedImages.startGameDarkImage = pygame.transform.scale(LoadedImages.startGameDarkImage, (360, 360 * LoadedImages.startGameDarkImageAspectRatio))
 
-    boulderImage = pygame.image.load("../Resources/Generic/boulder.png").convert_alpha()
-    boulderImage = pygame.transform.scale(boulderImage, (70, 70 * 73/76))
+        LoadedImages.crashImage = pygame.image.load("../Resources/crash.png").convert_alpha()
+        LoadedImages.crashImageAspectRatio = LoadedImages.crashImage.get_height() / LoadedImages.crashImage.get_width()
+        LoadedImages.crashImage = pygame.transform.scale(LoadedImages.crashImage, (360, 360 * LoadedImages.crashImageAspectRatio))
 
-    spikeImage = pygame.image.load("../Resources/Generic/spikes.png").convert_alpha()
-    spikeImage = pygame.transform.scale(spikeImage, (32, 32 * 177/60))
+        LoadedImages.boulderImage = pygame.image.load("../Resources/Generic/boulder.png").convert_alpha()
+        LoadedImages.boulderImage = pygame.transform.scale(LoadedImages.boulderImage, (70, 70 * 73 / 76))
+
+        LoadedImages.spikeImage = pygame.image.load("../Resources/Generic/spikes.png").convert_alpha()
+        LoadedImages.spikeImage = pygame.transform.scale(LoadedImages.spikeImage, (32, 32 * 177 / 60))
 
 
 class Button:
@@ -450,5 +451,61 @@ def launchGame():
     obstacleSpawner.cancel()
 
 
+class MainWindow(QtWidgets.QMainWindow):
+    def __init__(self):
+        super(MainWindow, self).__init__()
+        loadUi("Resources/UI/MainMenu.ui", self)
+        self.joinBtn.clicked.connect(self.joinClick)
+
+    def joinClick(self):
+        print(self.ipInput.text())
+        self.reInitPygame()
+        LoadedImages.init()
+        game = threading.Thread(target=launchGame)
+        game.start()
+        self.stackedWidget.setCurrentIndex(1)
+
+    @staticmethod
+    def reInitPygame():
+        global WIN, WIDTH, HEIGHT, clock, player1_pos, player2_pos
+        global player3_pos, player4_pos, playerCar, playerCount, playerChangeFlag
+        global limitLeft, limitRight, startGameFlag, backPos, backPos2, myObjects
+        global crashTime, crashFlag, moveFlag, carModels
+        pygame.init()
+        WIDTH, HEIGHT = 1080, 720
+        WIN = pygame.display.set_mode((WIDTH, HEIGHT))
+        pygame.display.set_caption("ASU RacerZ")
+        pygame.display.set_icon(pygame.image.load("../Resources/icon.png"))
+        clock = pygame.time.Clock()
+
+        playerCount = 2
+        playerChangeFlag = False
+        startGameFlag = False
+        player1_pos = pygame.Vector2(0, 0)
+        player2_pos = pygame.Vector2(0, 0)
+        player3_pos = pygame.Vector2(0, 0)
+        player4_pos = pygame.Vector2(0, 0)
+        limitLeft = 0
+        limitRight = (1080 - 70)
+        backPos = pygame.Vector2(0, 0)
+        backPos2 = pygame.Vector2(0, 0)
+
+        myObjects = []
+        crashTime = 0
+        crashFlag = False
+        moveFlag = True
+
+        carModels = ["audiCarImage", "blackVCarImage", "CarImage", "miniTruckCarImage", "miniVanCarImage",
+                     "policeCarImage",
+                     "taxiCarImage", "truckCarImage", "ambulanceCarImage"]
+        playerCar = random.choice(carModels)
+
+
 if __name__ == "__main__":
-    launchGame()
+    import sys
+    app = QtWidgets.QApplication(sys.argv)
+    MainWindow = MainWindow()
+    MainWindow.setWindowTitle("ASU RacerZ")
+    MainWindow.setWindowIcon(QtGui.QIcon("../Resources/icon.png"))
+    MainWindow.show()
+    sys.exit(app.exec_())
