@@ -55,12 +55,13 @@ def handle_connect():
     emit('message', ConstructMessage('Client Connected', "Server", 'connect'), broadcast=True)
     print(colorama.Fore.BLUE + "[*] Server: Sending Car List")
     emit('setCars', selectedCars)
+    emit('ready', readyCount, broadcast=True)
 
 
 @socketio.on('disconnect')
 def handle_disconnect():
     print(colorama.Fore.RED + "[*] Server: Client Disconnected")
-    emit('message', ConstructMessage('Client Disconnected', "Server", 'disconnect'), broadcast=True)
+    emit('message', ConstructMessage('A Client Has Disconnected', "Server", 'disconnect'), broadcast=True)
 
 
 @socketio.on('message')
@@ -87,7 +88,7 @@ def handle_ready():
 @socketio.on('update_position')
 def handle_update_position(data):
     emit('position_update', data, broadcast=True, include_self=False)
-    # spawnObstacles()
+    spawnObstacles()
 
 
 @socketio.on('playerCrash')
