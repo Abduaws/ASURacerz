@@ -53,6 +53,7 @@ threads = []
 connectionHealthCheckerThread = threading.Thread()
 connectionInterruptedFlag = False
 LoadingWindow = None
+clientConnected = False
 
 
 def resource_path(relative_path):
@@ -205,8 +206,8 @@ class LoadingDia(QtWidgets.QDialog):
         self.movie.start()
 
     def load_done(self):
-        global connectionInterruptedFlag
-        if not connectionInterruptedFlag:
+        global client
+        if client.connected:
             self.movie.stop()
             self.close()
 
@@ -221,13 +222,13 @@ class StartBtn:
         myObjects.append(self)
 
     def process(self):
-        global totalClientCount, totalReadyCount
+        global totalClientCount, totalReadyCount, clientConnected
         mousePos = pygame.mouse.get_pos()
         self.startBtn = LoadedImages.startGameImage
         if self.startRect.collidepoint(mousePos):
             self.startBtn = LoadedImages.startGameDarkImage
             if pygame.mouse.get_pressed(num_buttons=3)[0]:
-                if not self.alreadyPressed:
+                if not self.alreadyPressed and clientConnected:
                     client.emit('ready')
                     print(colorama.Fore.BLUE + "[*] Client: Sending Ready Signal To Server")
                     if totalClientCount == totalReadyCount:
@@ -305,24 +306,6 @@ def ConstructMessage(message, sender):
     }
 
 
-def checkConnectionHealth():
-    global appRunning, IP, connectionInterruptedFlag
-    while appRunning:
-        if not client.connected:
-            connectionInterruptedFlag = True
-            print(colorama.Fore.RED + "[*] Client: Couldn't Establish Connection To Server")
-            time.sleep(2)
-            if not client.connected:
-                print(colorama.Fore.BLUE + "[*] Client: Attempting to Establish Connection To Backup Server")
-                client.disconnect()
-                client.connect(f'http://{IP}:5000')
-                while not client.connected:
-                    pass
-                connectionInterruptedFlag = False
-                print(colorama.Fore.GREEN + "[*] Client: Connection Established To Backup Server")
-        time.sleep(0.1)
-
-
 def initGamePlayers():
     global player1Position, player2Position, limitRight, limitLeft, backPos, backPos2
     global player1Car, player2Car, selectedCars
@@ -350,10 +333,10 @@ def displayCrashMsg():
 
 
 def crashPlayer():
-    global player1Position, player2Position, crashTime, crashFlag, crashCount
+    global player1Position, player2Position, crashTime, crashFlag, crashCount, client
     if not startGameFlag:
         return
-    if crashCount > 3:
+    if crashCount > 3 and client.connected:
         client.emit('playerCrash', {'loser': clientName})
         print(colorama.Fore.RED + "[*] Client: Sending Crash Signal To Server")
         return
@@ -482,7 +465,7 @@ def launchGame():
 
 
 def updatePositioning():
-    global player1Position, player2Position, run, currPlayerPos
+    global player1Position, player2Position, run, currPlayerPos, client
     try:
         while run:
             time.sleep(0.1)
@@ -500,9 +483,148 @@ def updatePositioning():
                         'player1Position': {'x': player1Position.x, 'y': player1Position.y},
                         'player2Position': {'x': player2Position.x, 'y': player2Position.y}}
 
+            if not client.connected:
+                continue
             client.emit('update_position', data)
     except Exception as e:
         print(e)
+
+
+def InitializeClientEvents():
+    global client
+
+    @client.on('message')
+    def receiveMessage(data):
+        global messageQueue
+        print(colorama.Fore.YELLOW + "[*] Client: Received Chat Message From Server")
+        messageQueue.append(data)
+
+    @client.on('ready')
+    def handle_ready(data):
+        global totalReadyCount
+        totalReadyCount = int(data)
+        print(colorama.Fore.BLUE + "[*] Client: Received Player Ready Signal From Server")
+
+    @client.on('start')
+    def handle_start():
+        startBtnClick()
+        print(colorama.Fore.GREEN + "[*] Client: Received Start Game Signal From Server")
+
+    @client.on('playerSet')
+    def handle_playerSet(player):
+        global currPlayerPos
+        currPlayerPos = player
+        print(colorama.Fore.BLUE + "[*] Client: Received Client Player Position From Server")
+
+    @client.on('setCars')
+    def handle_setCars(selected_Cars):
+        global selectedCars
+        print(colorama.Fore.BLUE + "[*] Client: Received Car List From Server")
+        selectedCars = selected_Cars
+
+    @client.on('position_update')
+    def getNewPositions(data):
+        global disconnectedWhilePlaying
+        global player1Position, player2Position
+        eval(f'{data["SenderPos"]}').x = eval(f'{data[data["SenderPos"]]}')['x']
+        eval(f'{data["SenderPos"]}').y = eval(f'{data[data["SenderPos"]]}')['y']
+        if disconnectedWhilePlaying:
+            eval(f'{data["ReceiverPos"]}').x = eval(f'{data[data["ReceiverPos"]]}')['x']
+            eval(f'{data["ReceiverPos"]}').y = eval(f'{data[data["ReceiverPos"]]}')['y']
+            disconnectedWhilePlaying = False
+
+    @client.on('spawnObstacle')
+    def handle_spawnObstacle(pos):
+        global run, startGameFlag
+        if run and startGameFlag:
+            Obstacle(pos)
+
+    @client.on('endGame')
+    def handle_endGame(data):
+        global clientName, gameStatus, player1Position, player2Position, run, startGameFlag, myObjects, moveFlag
+        global threads, playAgainFlag
+        startGameFlag = False
+        moveFlag = False
+        myObjects.clear()
+        print(colorama.Fore.RED + "[*] Client: Received End Game Signal From Server")
+        if data['loser'] == clientName:
+            gameStatus = 'lost'
+        else:
+            gameStatus = 'won'
+        player1Position = pygame.Vector2(100000, 100000)
+        player2Position = pygame.Vector2(10000, 10000)
+        WinLose()
+        time.sleep(1)
+        run = False
+        for thread in threads:
+            thread.join()
+        threads.clear()
+        playAgainFlag = True
+
+    @client.on('connect')
+    def on_connect():
+        global connectionInterruptedFlag, clientConnected
+        print(colorama.Fore.GREEN + "[*] Client: Connected To Server")
+        connectionInterruptedFlag = False
+        clientConnected = True
+
+    @client.on('disconnect')
+    def on_disconnect():
+        global disconnectedWhilePlaying, startGameFlag, clientConnected, client
+        if startGameFlag:
+            disconnectedWhilePlaying = True
+        print(colorama.Fore.RED + "[*] Client: Disconnected From Server")
+        clientConnected = False
+        client.disconnect()
+
+
+def CheckAlive(host, port):
+    import socket
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.settimeout(2)
+    result = sock.connect_ex((host, port))
+    sock.close()
+    if result == 0:
+        return True
+    else:
+        return False
+
+
+def ServerConnect(server, port):
+    global client, IP, clientConnected
+    print(colorama.Fore.BLUE + f"[*] Client: Attempting to Establish Connection To {server}")
+    client.disconnect()
+    client = Client()
+    InitializeClientEvents()
+    client.connect(f'http://{IP}:{port}')
+    while not clientConnected:
+        continue
+    print(colorama.Fore.GREEN + f"[*] Client: Connection Established To {server}")
+
+
+def checkConnectionHealth():
+    global appRunning, IP, connectionInterruptedFlag, client
+    while appRunning:
+        if not clientConnected:
+            connectionInterruptedFlag = True
+
+            if client.connection_url == f'http://{IP}:5000':
+                print(colorama.Fore.RED + "[*] Client: Couldn't Establish Connection To Backup Server")
+            else:
+                print(colorama.Fore.RED + "[*] Client: Couldn't Establish Connection To Main Server")
+
+            time.sleep(1)
+            if not clientConnected:
+                if CheckAlive(IP, 5050):
+                    ServerConnect('Main Server', 5000)
+                elif CheckAlive(IP, 5000):
+                    ServerConnect('Backup Server', 5000)
+        else:
+            if client.connection_url == f'http://{IP}:5000':
+                if CheckAlive(IP, 5050):
+                    ServerConnect('Main Server', 5050)
+
+        time.sleep(0.1)
 
 
 class UserNameInputDia(QtWidgets.QDialog):
@@ -549,16 +671,23 @@ class MainWindow(QtWidgets.QMainWindow):
         self.connectionError = False
 
     def sendClick(self):
-        global clientName
+        global clientName, client
+        if not client.connected:
+            return
         client.emit('message', ConstructMessage(self.msgInput.text(), clientName))
         print(colorama.Fore.YELLOW + "[*] Client: Sending Chat Message To Server")
+        self.msgInput.clear()
 
     def processMessage(self):
         global totalClientCount, playAgainFlag, connectionInterruptedFlag, LoadingWindow
         if connectionInterruptedFlag:
+            self.sendBtn.setDisabled(True)
+            self.msgInput.setDisabled(True)
             LoadingWindow = LoadingDia()
-            self.alreadyRan = True
             LoadingWindow.exec_()
+            connectionInterruptedFlag = False
+            self.sendBtn.setDisabled(False)
+            self.msgInput.setDisabled(False)
         if playAgainFlag:
             MainWindow.setFixedSize(800, 710)
             time.sleep(1)
@@ -703,82 +832,6 @@ if __name__ == "__main__":
     MainWindow.setWindowIcon(QtGui.QIcon("Resources/icon.png"))
     MainWindow.show()
 
-
-    @client.on('message')
-    def receiveMessage(data):
-        print(colorama.Fore.YELLOW + "[*] Client: Received Chat Message From Server")
-        messageQueue.append(data)
-
-    @client.on('ready')
-    def handle_ready(data):
-        global totalReadyCount
-        totalReadyCount = int(data)
-        print(colorama.Fore.BLUE + "[*] Client: Received Player Ready Signal From Server")
-
-    @client.on('start')
-    def handle_start():
-        startBtnClick()
-        print(colorama.Fore.GREEN + "[*] Client: Received Start Game Signal From Server")
-
-    @client.on('playerSet')
-    def handle_playerSet(player):
-        global currPlayerPos
-        currPlayerPos = player
-        print(colorama.Fore.BLUE + "[*] Client: Received Client Player Position From Server")
-
-    @client.on('setCars')
-    def handle_setCars(selected_Cars):
-        global selectedCars
-        print(colorama.Fore.BLUE + "[*] Client: Received Car List From Server")
-        selectedCars = selected_Cars
-
-    @client.on('position_update')
-    def getNewPositions(data):
-        global disconnectedWhilePlaying
-        global player1Position, player2Position
-        eval(f'{data["SenderPos"]}').x = eval(f'{data[data["SenderPos"]]}')['x']
-        eval(f'{data["SenderPos"]}').y = eval(f'{data[data["SenderPos"]]}')['y']
-        if disconnectedWhilePlaying:
-            eval(f'{data["ReceiverPos"]}').x = eval(f'{data[data["ReceiverPos"]]}')['x']
-            eval(f'{data["ReceiverPos"]}').y = eval(f'{data[data["ReceiverPos"]]}')['y']
-            disconnectedWhilePlaying = False
-
-    @client.on('spawnObstacle')
-    def handle_spawnObstacle(pos):
-        if run and startGameFlag:
-            Obstacle(pos)
-
-    @client.on('endGame')
-    def handle_endGame(data):
-        global clientName, gameStatus, player1Position, player2Position, run, startGameFlag, myObjects, moveFlag
-        global threads, playAgainFlag
-        startGameFlag = False
-        moveFlag = False
-        myObjects.clear()
-        print(colorama.Fore.RED + "[*] Client: Received End Game Signal From Server")
-        if data['loser'] == clientName:
-            gameStatus = 'lost'
-        else:
-            gameStatus = 'won'
-        player1Position = pygame.Vector2(100000, 100000)
-        player2Position = pygame.Vector2(10000, 10000)
-        WinLose()
-        run = False
-        for thread in threads:
-            thread.join()
-        threads.clear()
-        playAgainFlag = True
-
-    @client.on('connect')
-    def on_connect():
-        print(colorama.Fore.GREEN + "[*] Client: Connected To Server")
-
-    @client.on('disconnect')
-    def on_disconnect():
-        global disconnectedWhilePlaying
-        if startGameFlag:
-            disconnectedWhilePlaying = True
-        print(colorama.Fore.RED + "[*] Client: Disconnected From Server")
-
+    InitializeClientEvents()
 
     sys.exit(app.exec_())
