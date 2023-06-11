@@ -1,6 +1,7 @@
 import random
 from flask import Flask
 from flask_socketio import SocketIO, emit
+import colorama
 
 app = Flask(__name__)
 socketio = SocketIO(app)
@@ -49,18 +50,23 @@ def ConstructMessage(message, sender, connectionType=None):
 @socketio.on('connect')
 def handle_connect():
     global selectedCars
+    print(colorama.Fore.GREEN + "[*] Server: Client Connected")
     emit('message', ConstructMessage('Client Connected', "Server", 'connect'), broadcast=True)
+    print(colorama.Fore.BLUE + "[*] Server: Sending Car List")
     emit('setCars', selectedCars)
 
 
 @socketio.on('disconnect')
 def handle_disconnect():
+    print(colorama.Fore.RED + "[*] Server: Client Disconnected")
     emit('message', ConstructMessage('Client Disconnected', "Server", 'disconnect'), broadcast=True)
 
 
 @socketio.on('message')
 def handle_message(data: dict):
+    print(colorama.Fore.YELLOW + "[*] Server: Received Player Message")
     emit('message', data, broadcast=True)
+    print(colorama.Fore.YELLOW + "[*] Server: BroadCasting Player Message")
 
 
 @socketio.on('ready')
@@ -70,7 +76,9 @@ def handle_ready():
     emit('playerSet', playerPositions[0])
     playerPositions.pop(0)
     emit('ready', readyCount, broadcast=True)
+    print(colorama.Fore.BLUE + "[*] Server: Emitting Player Ready Signal")
     if readyCount == 2:
+        print(colorama.Fore.GREEN + "[*] Server: Sending Start Game Signal")
         emit('start', broadcast=True)
 
 
@@ -83,9 +91,11 @@ def handle_update_position(data):
 @socketio.on('playerCrash')
 def handle_playerCrash(data):
     global selectedCars, readyCount, playerPositions
+    print(colorama.Fore.RED + "[*] Server: Sending End Game Signal")
     emit('endGame', data, broadcast=True)
     initGameVariables()
     emit('setCars', selectedCars, broadcast=True)
+    print(colorama.Fore.BLUE + "[*] Server: Sending New Cars")
 
 
 def initGameVariables():
@@ -102,4 +112,5 @@ def initGameVariables():
 
 if __name__ == '__main__':
     initGameVariables()
+    print(colorama.Fore.GREEN + "[*] Server: Listening On Port 5050")
     socketio.run(app, "192.168.1.203", 5050)
