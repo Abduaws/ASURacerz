@@ -1,9 +1,14 @@
 import random
 import pygame
 import threading
-
 from PyQt5 import QtWidgets, QtGui
+from PyQt5.QtCore import QThread, QTimer
 from PyQt5.uic import loadUi
+from socketio import Client
+
+
+client = Client()
+messageQueue = []
 
 
 class LoadedImages:
@@ -187,6 +192,13 @@ class Obstacle:
         if p1Rect.colliderect(self.obstacleRect):
             crashPlayer(1)
             print("Player 1 Crashed into Obstacle")
+
+
+def ConstructMessage(message, sender):
+    return {
+        'msg': message,
+        'sender': sender
+    }
 
 
 def initGamePlayers():
@@ -456,9 +468,24 @@ class MainWindow(QtWidgets.QMainWindow):
         super(MainWindow, self).__init__()
         loadUi("Resources/UI/MainMenu.ui", self)
         self.joinBtn.clicked.connect(self.joinClick)
+        self.sendBtn.clicked.connect(self.sendClick)
+        self.connectionThread = QThread()
+        self.timer = QTimer()
+        self.timer.timeout.connect(self.processMessage)
+        self.timer.start(50)
+
+    def sendClick(self):
+        client.emit('message', ConstructMessage(self.msgInput.text(), 'Player'))
+
+    def processMessage(self):
+        if messageQueue:
+            for data in messageQueue:
+                self.serverText.setText(self.serverText.toPlainText() + f"\n{data['sender']}: {data['msg']}")
+            messageQueue.clear()
 
     def joinClick(self):
-        print(self.ipInput.text())
+        self.connectionThread.started.connect(lambda: client.connect(f"http://{self.ipInput.text()}:5050"))
+        self.connectionThread.start()
         self.reInitPygame()
         LoadedImages.init()
         game = threading.Thread(target=launchGame)
@@ -508,4 +535,16 @@ if __name__ == "__main__":
     MainWindow.setWindowTitle("ASU RacerZ")
     MainWindow.setWindowIcon(QtGui.QIcon("../Resources/icon.png"))
     MainWindow.show()
+
+
+    @client.on('message')
+    def receiveMessage(data):
+        messageQueue.append(data)
+
+
+    @client.on('position_update')
+    def getNewPositions(data):
+        # Update Positions
+        pass
+
     sys.exit(app.exec_())
