@@ -37,6 +37,7 @@ crashFlag = False
 moveFlag = True
 run = True
 disconnectedWhilePlaying = False
+playAgainFlag = False
 
 totalReadyCount = 0
 currPlayerPos = None
@@ -480,7 +481,12 @@ class MainWindow(QtWidgets.QMainWindow):
         print(colorama.Fore.YELLOW + "[*] Client: Sending Chat Message To Server")
 
     def processMessage(self):
-        global totalClientCount
+        global totalClientCount, playAgainFlag
+        if playAgainFlag:
+            MainWindow.setFixedSize(800, 710)
+            time.sleep(1)
+            pygame.display.iconify()
+            playAgainFlag = False
         if messageQueue:
             for data in messageQueue:
                 if 'clientCount' in data.keys():
@@ -492,10 +498,6 @@ class MainWindow(QtWidgets.QMainWindow):
         global WIN, threads, run, WIDTH, HEIGHT, myObjects, moveFlag, startGameFlag, player2Car, player1Car
         global crashFlag, totalReadyCount, gameStatus, crashCount, disconnectedWhilePlaying, selectedCars
         self.setFixedSize(800, 600)
-
-        WIN = pygame.display.set_mode((WIDTH, HEIGHT))
-        pygame.display.set_caption("ASU RacerZ")
-        pygame.display.set_icon(pygame.image.load("Resources/icon.png"))
 
         myObjects = []
 
@@ -580,9 +582,6 @@ class MainWindow(QtWidgets.QMainWindow):
             print(exception)
             self.connectionError = True
 
-        while not self.exitClicked:
-            time.sleep(0.1)
-
     @staticmethod
     def InitPygame():
         global WIN, threads, run
@@ -665,7 +664,10 @@ if __name__ == "__main__":
 
     @client.on('endGame')
     def handle_endGame(data):
-        global clientName, gameStatus, player1Position, player2Position, run, startGameFlag, myObjects
+        global clientName, gameStatus, player1Position, player2Position, run, startGameFlag, myObjects, moveFlag
+        global threads, playAgainFlag
+        startGameFlag = False
+        moveFlag = False
         myObjects.clear()
         print(colorama.Fore.RED + "[*] Client: Received End Game Signal From Server")
         if data['loser'] == clientName:
@@ -674,12 +676,12 @@ if __name__ == "__main__":
             gameStatus = 'won'
         player1Position = pygame.Vector2(100000, 100000)
         player2Position = pygame.Vector2(10000, 10000)
-        startGameFlag = False
         WinLose()
-        time.sleep(3)
         run = False
-        pygame.display.quit()
-        MainWindow.setFixedSize(800, 710)
+        for thread in threads:
+            thread.join()
+        threads.clear()
+        playAgainFlag = True
 
     @client.on('connect')
     def on_connect():
