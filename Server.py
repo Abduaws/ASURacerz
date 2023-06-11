@@ -85,7 +85,7 @@ def handle_playerCrash(data):
     global selectedCars, readyCount, playerPositions
     emit('endGame', data, broadcast=True)
     initGameVariables()
-    emit('setCars', selectedCars)
+    emit('setCars', selectedCars, broadcast=True)
 
 
 def initGameVariables():
