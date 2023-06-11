@@ -1,8 +1,10 @@
 import time
 import pygame
 import threading
+import re
+import socketio.exceptions
 from PyQt5 import QtWidgets, QtGui
-from PyQt5.QtCore import QThread, QTimer
+from PyQt5.QtCore import QTimer
 from PyQt5.uic import loadUi
 from socketio import Client
 
@@ -185,15 +187,12 @@ class StartBtn:
 
 class WinLose:
     def __init__(self):
-        global gameStatus
-        if gameStatus == 'lost':
-            self.loseImage = LoadedImages.loseImage
-            self.loseImageRect = LoadedImages.loseImage.get_rect()
-            self.loseImageRect.center = (WIN.get_width() / 2, WIN.get_height() / 2)
-        else:
-            self.winImage = LoadedImages.winImage
-            self.winImageRect = LoadedImages.winImage.get_rect()
-            self.winImageRect.center = (WIN.get_width() / 2, WIN.get_height() / 2)
+        self.loseImage = LoadedImages.loseImage
+        self.loseImageRect = LoadedImages.loseImage.get_rect()
+        self.loseImageRect.center = (WIN.get_width() / 2, WIN.get_height() / 2)
+        self.winImage = LoadedImages.winImage
+        self.winImageRect = LoadedImages.winImage.get_rect()
+        self.winImageRect.center = (WIN.get_width() / 2, WIN.get_height() / 2)
         myObjects.append(self)
 
     def process(self):
@@ -268,6 +267,8 @@ def displayCrashMsg():
 
 def crashPlayer():
     global player1Position, player2Position, crashTime, crashFlag, crashCount
+    if not startGameFlag:
+        return
     if crashCount > 3:
         client.emit('playerCrash', {'loser': clientName})
         return
@@ -391,14 +392,12 @@ def launchGame():
         drawWindow()
         clock.tick(60)
 
-    pygame.quit()
-
 
 def updatePositioning():
     global player1Position, player2Position, run, currPlayerPos
     while run:
         time.sleep(0.1)
-        if not client.connected:
+        if not client.connected or not run:
             continue
 
         if currPlayerPos == 'player1Position':
@@ -419,8 +418,10 @@ class UserNameInputDia(QtWidgets.QDialog):
     def __init__(self):
         super(UserNameInputDia, self).__init__()
         loadUi("Resources/UI/UsernameInput.ui", self)
+        self.setFixedSize(400, 300)
         self.setWindowTitle("Username")
         self.setWindowIcon(QtGui.QIcon("Resources/icon.png"))
+        self.label_2.setPixmap(QtGui.QPixmap('Resources/Roads/road2p.png'))
 
     def getUserName(self):
         if self.exec_() == QtWidgets.QDialog.Accepted:
@@ -433,6 +434,19 @@ class MainWindow(QtWidgets.QMainWindow):
     def __init__(self):
         super(MainWindow, self).__init__()
         loadUi("Resources/UI/MainMenu.ui", self)
+        self.setFixedSize(800, 600)
+        self.label_3.setPixmap(QtGui.QPixmap('Resources/Roads/road2p.png'))
+        self.label_4.setPixmap(QtGui.QPixmap('Resources/Roads/road2p.png'))
+        self.label_5.setPixmap(QtGui.QPixmap('Resources/Cars/Audi.png'))
+        self.label_6.setPixmap(QtGui.QPixmap('Resources/Cars/Police.png'))
+        self.label_7.setPixmap(QtGui.QPixmap('Resources/Generic/tree.png'))
+        self.label_8.setPixmap(QtGui.QPixmap('Resources/Generic/tree.png'))
+        self.label_9.setPixmap(QtGui.QPixmap('Resources/Generic/tree.png'))
+        self.label_10.setPixmap(QtGui.QPixmap('Resources/Generic/tree.png'))
+        self.label_11.setPixmap(QtGui.QPixmap('Resources/Generic/tree.png'))
+        self.label_12.setPixmap(QtGui.QPixmap('Resources/Generic/tree.png'))
+        self.playAgainBtn.setIcon(QtGui.QIcon('Resources/playAgain.png'))
+        self.playAgainBtn.clicked.connect(self.playAgainClick)
         self.joinBtn.clicked.connect(self.joinClick)
         self.ipInput.returnPressed.connect(self.joinClick)
         self.sendBtn.clicked.connect(self.sendClick)
@@ -440,6 +454,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.timer = QTimer()
         self.timer.timeout.connect(self.processMessage)
         self.timer.start(50)
+        self.exitClicked = False
+        self.connectionError = False
 
     def sendClick(self):
         global clientName
@@ -454,8 +470,45 @@ class MainWindow(QtWidgets.QMainWindow):
                 self.serverText.append(f"\n{data['sender']}: {data['msg']}")
             messageQueue.clear()
 
+    def playAgainClick(self):
+        global WIN, threads, run, WIDTH, HEIGHT, myObjects, moveFlag, startGameFlag
+        global crashFlag, totalReadyCount, gameStatus, crashCount, disconnectedWhilePlaying
+        self.setFixedSize(800, 600)
+
+        WIN = pygame.display.set_mode((WIDTH, HEIGHT))
+        pygame.display.set_caption("ASU RacerZ")
+        pygame.display.set_icon(pygame.image.load("Resources/icon.png"))
+
+        myObjects = []
+
+        startGameFlag = False
+        crashFlag = False
+        moveFlag = True
+        run = True
+        disconnectedWhilePlaying = False
+
+        totalReadyCount = 0
+        gameStatus = 'playing'
+        crashCount = 0
+
+        LoadedImages.init()
+
+        game = threading.Thread(target=launchGame)
+        threads.append(game)
+        game.start()
+
     def joinClick(self):
+        if not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+', self.ipInput.text()):
+            self.errorPopup('Enter IP in Correct Format')
+            return
+
         self.connectToServer()
+
+        while not client.connected:
+            if self.connectionError:
+                self.errorPopup(f"Couldn't connect to EndPoint http://{self.ipInput.text()}:5050")
+                self.connectionError = False
+                return
 
         self.InitPygame()
 
@@ -473,16 +526,41 @@ class MainWindow(QtWidgets.QMainWindow):
         threads.append(connectionThread)
         connectionThread.start()
 
-        while not client.connected:
-            pass
-
     def closeEvent(self, event):
-        global client
-        self.timer.stop()
+        global client, startGameFlag, run
+        startGameFlag = False
+        run = False
+        self.exitClicked = True
+
         client.disconnect()
+        self.timer.stop()
         for thread in threads:
             thread.join()
-        print('All Threads Ended')
+
+    def ServerConnectionHandler(self, IP):
+        try:
+            client.connect(f"http://{IP}:5050")
+        except socketio.exceptions.ConnectionRefusedError as connectionRefusedError:
+            print(connectionRefusedError)
+            self.connectionError = True
+        except socketio.exceptions.ConnectionError as connectionErr:
+            print(connectionErr)
+            self.connectionError = True
+        except socketio.exceptions.TimeoutError as timeoutError:
+            print(timeoutError)
+            self.connectionError = True
+        except socketio.exceptions.BadNamespaceError as badNamespaceError:
+            print(badNamespaceError)
+            self.connectionError = True
+        except socketio.exceptions.SocketIOError as socketIOError:
+            print(socketIOError)
+            self.connectionError = True
+        except Exception as exception:
+            print(exception)
+            self.connectionError = True
+
+        while not self.exitClicked:
+            time.sleep(0.1)
 
     @staticmethod
     def InitPygame():
@@ -500,10 +578,15 @@ class MainWindow(QtWidgets.QMainWindow):
         game.start()
 
     @staticmethod
-    def ServerConnectionHandler(IP):
-        client.connect(f"http://{IP}:5050")
-        while True:
-            time.sleep(1)
+    def errorPopup(err_msg, extra=""):
+        msg = QtWidgets.QMessageBox()
+        msg.setWindowTitle("Error")
+        msg.setWindowIcon(QtGui.QIcon("Resources/icon.png"))
+        msg.setText("An Error Occurred!")
+        msg.setIcon(QtWidgets.QMessageBox.Critical)
+        msg.setInformativeText(err_msg)
+        if extra != "": msg.setDetailedText(extra)
+        msg.exec_()
 
 
 if __name__ == "__main__":
@@ -519,29 +602,24 @@ if __name__ == "__main__":
     def receiveMessage(data):
         messageQueue.append(data)
 
-
     @client.on('ready')
     def handle_ready(data):
         global totalReadyCount
         totalReadyCount = int(data)
 
-
     @client.on('start')
     def handle_start():
         startBtnClick()
-
 
     @client.on('playerSet')
     def handle_playerSet(player):
         global currPlayerPos
         currPlayerPos = player
 
-
     @client.on('setCars')
     def handle_setCars(selected_Cars):
         global selectedCars
         selectedCars = selected_Cars
-
 
     @client.on('position_update')
     def getNewPositions(data):
@@ -571,6 +649,8 @@ if __name__ == "__main__":
         WinLose()
         time.sleep(3)
         run = False
+        pygame.display.quit()
+        MainWindow.setFixedSize(800, 710)
 
     @client.on('connect')
     def on_connect():
