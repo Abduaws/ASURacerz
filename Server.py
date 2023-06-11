@@ -11,6 +11,7 @@ selectedCars = list()
 playerPositions = list()
 clientCount = 0
 readyCount = 0
+gameStarted = False
 
 
 def spawnObstacles():
@@ -71,7 +72,7 @@ def handle_message(data: dict):
 
 @socketio.on('ready')
 def handle_ready():
-    global readyCount, clientCount, playerPositions
+    global readyCount, clientCount, playerPositions, gameStarted
     readyCount += 1
     emit('playerSet', playerPositions[0])
     playerPositions.pop(0)
@@ -80,6 +81,7 @@ def handle_ready():
     if readyCount == 2:
         print(colorama.Fore.GREEN + "[*] Server: Sending Start Game Signal")
         emit('start', broadcast=True)
+        gameStarted = True
 
 
 @socketio.on('update_position')
@@ -90,12 +92,15 @@ def handle_update_position(data):
 
 @socketio.on('playerCrash')
 def handle_playerCrash(data):
-    global selectedCars, readyCount, playerPositions
+    global selectedCars, readyCount, playerPositions, gameStarted
+    if not gameStarted:
+        return
     print(colorama.Fore.RED + "[*] Server: Sending End Game Signal")
     emit('endGame', data, broadcast=True)
     initGameVariables()
     emit('setCars', selectedCars, broadcast=True)
     print(colorama.Fore.BLUE + "[*] Server: Sending New Cars")
+    gameStarted = False
 
 
 def initGameVariables():
