@@ -80,20 +80,6 @@ def handle_update_position(data):
     # spawnObstacles()
 
 
-@socketio.on('retrievePositions')
-def handle_retrievePositions(data):
-    print('[*] Received Positions from Player')
-    print('[*] Forwarding Positions to other Player\n')
-    emit('recoverPositions', data, broadcast=True, include_self=False)
-
-
-@socketio.on('recoverPositions')
-def handle_recoverPositions():
-    print('[*] A Client Reconnected While Game is Being Played')
-    print('[*] Retrieving Positions from other Player\n')
-    emit('retrievePositions', broadcast=True, include_self=False)
-
-
 @socketio.on('playerCrash')
 def handle_playerCrash(data):
     global selectedCars, readyCount, playerPositions
