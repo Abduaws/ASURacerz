@@ -225,6 +225,8 @@ class StartBtn:
 
     def process(self):
         global totalClientCount, totalReadyCount, clientConnected
+        if not clientConnected:
+            self.alreadyPressed = False
         mousePos = pygame.mouse.get_pos()
         self.startBtn = LoadedImages.startGameImage
         if self.startRect.collidepoint(mousePos):
